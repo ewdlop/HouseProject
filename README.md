@@ -111,4 +111,185 @@ if __name__ == "__main__":
         print(f"Hash: {block.hash}")
         print(f"Nonce: {block.nonce}")
 
-## 
+
+## Q# Implementation
+
+```qsharp
+namespace QuantumMining {
+    open Microsoft.Quantum.Canon;
+    open Microsoft.Quantum.Intrinsic;
+    open Microsoft.Quantum.Arrays;
+    open Microsoft.Quantum.Convert;
+    open Microsoft.Quantum.Math;
+    
+    // Oracle for mining - checks if hash meets difficulty
+    operation MiningOracle(difficulty : Int, register : Qubit[], target : Qubit) : Unit is Adj + Ctl {
+        // Simulate hash function verification
+        let n = Length(register);
+        
+        // Check if first 'difficulty' qubits are |0⟩
+        for idx in 0..difficulty - 1 {
+            Controlled X([register[idx]], target);
+        }
+    }
+    
+    // Grover diffusion operator
+    operation GroverDiffusion(register : Qubit[]) : Unit is Adj + Ctl {
+        let n = Length(register);
+        
+        // Convert to |±⟩ basis
+        ApplyToEachA(H, register);
+        
+        // Flip phase for |0...0⟩
+        ApplyToEachA(X, register);
+        Controlled Z(Most(register), Tail(register));
+        ApplyToEachA(X, register);
+        
+        // Convert back to computational basis
+        ApplyToEachA(H, register);
+    }
+    
+    // Main Grover's algorithm for mining
+    operation GroverMining(nQubits : Int, difficulty : Int) : Result[] {
+        // Number of Grover iterations
+        let iterations = Round(PI() * Sqrt(PowD(2.0, IntAsDouble(nQubits))) / 4.0);
+        
+        // Allocate qubits
+        use (register, target) = (Qubit[nQubits], Qubit()) {
+            // Initialize superposition
+            ApplyToEach(H, register);
+            
+            // Perform Grover iterations
+            for _ in 1..iterations {
+                // Apply oracle
+                MiningOracle(difficulty, register, target);
+                
+                // Apply diffusion
+                GroverDiffusion(register);
+            }
+            
+            // Measure all qubits
+            let results = MultiM(register);
+            Reset(target);
+            return results;
+        }
+    }
+}
+```
+
+## Qiskit Implementation
+
+```python
+import numpy as np
+from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
+from qiskit import Aer, execute
+from qiskit.circuit.library import GroverOperator
+from qiskit.algorithms import Grover
+from qiskit.quantum_info import Operator
+
+class QuantumMiner:
+    def __init__(self, num_qubits: int, difficulty: int):
+        self.num_qubits = num_qubits
+        self.difficulty = difficulty
+        self.backend = Aer.get_backend('qasm_simulator')
+    
+    def create_mining_oracle(self) -> QuantumCircuit:
+        """Create quantum oracle for mining verification"""
+        oracle_qc = QuantumCircuit(self.num_qubits + 1)
+        
+        # Create multi-controlled-X gate for difficulty check
+        # The first 'difficulty' qubits should be |0⟩
+        for i in range(self.difficulty):
+            oracle_qc.x(i)
+        
+        oracle_qc.mcx(list(range(self.difficulty)), self.num_qubits)
+        
+        for i in range(self.difficulty):
+            oracle_qc.x(i)
+            
+        return oracle_qc
+    
+    def create_diffusion_operator(self) -> QuantumCircuit:
+        """Create Grover diffusion operator"""
+        qc = QuantumCircuit(self.num_qubits)
+        
+        # Apply H gates to all qubits
+        qc.h(range(self.num_qubits))
+        
+        # Apply X gates to all qubits
+        qc.x(range(self.num_qubits))
+        
+        # Apply multi-controlled Z gate
+        qc.h(self.num_qubits - 1)
+        qc.mcx(list(range(self.num_qubits - 1)), self.num_qubits - 1)
+        qc.h(self.num_qubits - 1)
+        
+        # Apply X gates to all qubits
+        qc.x(range(self.num_qubits))
+        
+        # Apply H gates to all qubits
+        qc.h(range(self.num_qubits))
+        
+        return qc
+    
+    def create_grover_circuit(self, iterations: int) -> QuantumCircuit:
+        """Create complete Grover's algorithm circuit for mining"""
+        # Create quantum and classical registers
+        qr = QuantumRegister(self.num_qubits + 1)
+        cr = ClassicalRegister(self.num_qubits)
+        qc = QuantumCircuit(qr, cr)
+        
+        # Initialize superposition
+        qc.h(range(self.num_qubits))
+        qc.x(self.num_qubits)
+        qc.h(self.num_qubits)
+        
+        # Apply Grover iterations
+        oracle = self.create_mining_oracle()
+        diffusion = self.create_diffusion_operator()
+        
+        for _ in range(iterations):
+            qc.append(oracle, range(self.num_qubits + 1))
+            qc.append(diffusion, range(self.num_qubits))
+        
+        # Measure qubits
+        qc.measure(range(self.num_qubits), range(self.num_qubits))
+        
+        return qc
+    
+    def run_quantum_mining(self) -> str:
+        """Execute quantum mining algorithm"""
+        # Calculate optimal number of iterations
+        iterations = int(np.pi/4 * np.sqrt(2**self.num_qubits))
+        
+        # Create and execute circuit
+        qc = self.create_grover_circuit(iterations)
+        job = execute(qc, self.backend, shots=1000)
+        result = job.result()
+        counts = result.get_counts()
+        
+        # Find most frequent result
+        max_result = max(counts.items(), key=lambda x: x[1])[0]
+        return max_result
+    
+    def verify_mining_result(self, result: str) -> bool:
+        """Verify if mining result meets difficulty requirement"""
+        return result.startswith('0' * self.difficulty)
+
+# Example usage
+if __name__ == "__main__":
+    # Q# simulation would be run through host program
+    print("Q# implementation would be executed through host program")
+    
+    # Qiskit implementation
+    print("\nQiskit Quantum Mining Demo:")
+    miner = QuantumMiner(num_qubits=4, difficulty=2)
+    result = miner.run_quantum_mining()
+    print(f"Mining result: {result}")
+    print(f"Meets difficulty: {miner.verify_mining_result(result)}")
+    
+    # Show circuit details
+    circuit = miner.create_grover_circuit(1)
+    print("\nQuantum Circuit Depth:", circuit.depth())
+    print("Number of gates:", sum(circuit.count_ops().values()))
+```
