@@ -12,6 +12,7 @@ I: God I see how it is.
 
 God:
 
-I called him big and scary. He calls me fat. Other says don't call him fat. 
+I called him big and scary. I think it calls me fat. Other says don't call him fat. 
 
 God:
+
